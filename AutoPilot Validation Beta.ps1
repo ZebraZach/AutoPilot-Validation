@@ -1,68 +1,68 @@
 # ====== Initialization ====== #
 
-$adminPriviledges = $false
+$AdminPrivilege = $false
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Running with no Administrator rights."
-    $adminPriviledges = $false
+    $AdminPrivilege = $false
 } else {
     Write-Host "Running with Administrator rights."
-    $adminPriviledges = $true
+    $AdminPrivilege = $true
 }
 
-$currentDirectory = Split-Path $MyInvocation.MyCommand.Path
-$username = $env:USERNAME
-$machineName = $env:COMPUTERNAME
-$powershellVersion = $PSVersionTable.PSVersion.ToString()
-$dateTime = Get-Date -f 'yyyyMMddHHmmss'
-$todaysDay = Get-Date -f MM-dd
-$transcriptFileName = "Transcript-${username}-${machineName}-${powershellVersion}-${dateTime}.txt"
+$CurrentDirectory = Split-Path $MyInvocation.MyCommand.Path
+$HostUsername = $env:USERNAME
+$HostMachineName = $env:COMPUTERNAME
+$PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+$DateTime = Get-Date -f 'yyyyMMddHHmmss'
+$DateMonthDay = Get-Date -f MM-dd
+$TranscriptFileName = "Transcript-${HostUsername}-${HostMachineName}-${PowerShellVersion}-${DateTime}.txt"
 
 
-if ( -not ( Test-Path -Path "$currentDirectory/Transcript" )) { New-Item -Path "$currentDirectory/Transcript" -ItemType Directory }
-if ( -not ( Test-Path -Path "$currentDirectory/Transcript/$todaysDay" )) { New-Item -Path "$currentDirectory/Transcript/$todaysDay" -ItemType Directory }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Transcript" )) { New-Item -Path "$CurrentDirectory/Transcript" -ItemType Directory }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Transcript/$DateMonthDay" )) { New-Item -Path "$CurrentDirectory/Transcript/$DateMonthDay" -ItemType Directory }
 
-Start-Transcript -Path "$currentDirectory/Transcript/$todaysDay/${transcriptFileName}"
+Start-Transcript -Path "$CurrentDirectory/Transcript/$DateMonthDay/${TranscriptFileName}"
 
 # ====== Start Timer ====== #
 
-$startTimer = Get-Date -f 'HHmmss'
+$StartTimer = Get-Date -f 'HHmmss'
 
 # ====== Registry Key Retrieval Function ====== #
 
 function Retrieve_Registry_Versions {
     param (
-        [string]$path,
-        [array]$controlArray,
-        [ref]$filteredArray
+        [string]$Path,
+        [array]$ControlArray,
+        [ref]$FilteredArray
     )
 
-    $keys = Get-ChildItem -path $path | ForEach-Object { Get-ItemProperty $_.PSPath } | Select-Object -Property DisplayName, DisplayVersion, InstallSource
+    $keys = Get-ChildItem -Path $Path | ForEach-Object { Get-ItemProperty $_.PSPath } | Select-Object -Property DisplayName, DisplayVersion, InstallSource
     
     foreach ( $item in $keys ) {
-        foreach ( $controlName in $controlArray ){
-            if ( $controlName.Display_Name -like $item.DisplayName ){
+        foreach ( $ControlName in $ControlArray ){
+            if ( $ControlName.Display_Name -like $item.DisplayName ){
 
-                $modifiedItem = [PSCustomObject]@{
+                $ModifiedItem = [PSCustomObject]@{
                     Display_Name = $item.DisplayName
                     Display_Version = $item.DisplayVersion
-                    Target_Version = $controlName.Target_Version
-                    Type = $controlName.Type
+                    Target_Version = $ControlName.Target_Version
+                    Type = $ControlName.Type
                     Install_Source = $item.InstallSource 
                 }
 
-                $filteredArray.Value += $modifiedItem }}}
+                $FilteredArray.Value += $ModifiedItem }}}
 }
 
 # ====== Application Registry Paths  ====== #
 
-$uninstallKey64Bit = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-$uninstallKey32Bit = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
-$uninstallKeyUser = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
+$UninstallKey64Bit = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+$UninstallKey32Bit = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+$UninstallKeyUser  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
 
 # ====== Control Array & Filtered Array ====== # 
 
-$controlApplications =@(
+$ControlApplications =@(
     #ESP APPLICATIONS
     [PSCustomObject]@{ Display_Name = "DisplayLink Graphics"                                 ; Target_Version = '10.2.7042.0'        ; Type = "ESP" },
     [PSCustomObject]@{ Display_Name = "Google Chrome"                                        ; Target_Version = '114.0.5735.134'     ; Type = "ESP" },
@@ -88,33 +88,58 @@ $controlApplications =@(
     [PSCustomObject]@{ Display_Name = "Zscaler"                                              ; Target_Version = '4.2.0.198'          ; Type = "Mandatory" }
 )
 
-$filteredApplications=@()
+$FilteredApplications=@()
 
 # ====== Invoke Retrieve_Registry_Versions ====== # 
 
-try { Retrieve_Registry_Versions -path $uninstallKey64Bit -controlArray $controlApplications -filteredArray ( [ref]$filteredApplications )} catch { Write-Error "Failed to retrieve 64 bit registry keys" }
-try { Retrieve_Registry_Versions -path $uninstallKey32Bit -controlArray $controlApplications -filteredArray ( [ref]$filteredApplications )} catch { Write-Error "Failed to retrieve 32 bit registry keys" }
-try { Retrieve_Registry_Versions -path $uninstallKeyUser  -controlArray $controlApplications -filteredArray ( [ref]$filteredApplications )} catch { Write-Error "Failed to retrieve User Installed registry keys" }
+try { Retrieve_Registry_Versions -Path $UninstallKey64Bit -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { Write-Error "Failed to retrieve 64 bit registry keys." }
+try { Retrieve_Registry_Versions -Path $UninstallKey32Bit -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { Write-Error "Failed to retrieve 32 bit registry keys." }
+try { Retrieve_Registry_Versions -Path $UninstallKeyUser  -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { Write-Error "Failed to retrieve User Installed registry keys." }
+
+# ====== Check Company Portal Package ====== #
+
+$PackageCompanyPortal = Get-AppxPackage "Microsoft.CompanyPortal"
+
+if ( $PackageCompanyPortal ) {
+
+    $ModifiedItem = [PSCustomObject]@{
+        Display_Name = $PackageCompanyPortal.Name
+        Display_Version = $PackageCompanyPortal.Version
+        Target_Version = $ControlApplications[4].Target_Version
+        Type = $ControlApplications[4].Type
+        Install_Source = $PackageCompanyPortal.InstallLocation
+    }
+
+    $FilteredApplications += $ModifiedItem
+}
+
+# ====== Retrieve Display_Version For  J&J Icon and Link ====== #
+
+ForEach ( $element in $FilteredApplications ) {
+    if ( $element.Display_Name -like "*v3.0*" ) { $element.Display_Version = '3.0' }
+}
 
 # ====== Version Comparison ====== #
 
-$uniqueFilteredApplications = $filteredApplications | Sort-Object -Property Display_Name -Unique
+$UniqueFilteredApplications = $FilteredApplications | Sort-Object -Property Display_Name -Unique
 
-$uniqueFilteredApplications.ForEach{
+$UniqueFilteredApplications.ForEach{
     if ( $_.Target_Version -le $_.Display_Version ){ $PSItem | Add-Member -MemberType NoteProperty -Name "Version_Check" -Value $true }
     else { $PSItem | Add-Member -MemberType NoteProperty -Name "Version_Check" -Value $false }
 }
 
-# ====== Find Missing Registry Keys ====== #
+# ====== Cleaning Up Duplicates in $ControlApplications Array ====== #
 
-$MissingRegistryKeys=@()
+if ( $ControlApplications[9].Display_Name -in $UniqueFilteredApplications.Display_Name ) { $NewControlApplications = $ControlApplications | Where-Object { $PSItem.Display_Name -ne $ControlApplications[9].Display_Name }}
+elseif ( $ControlApplications[10].Display_Name -in $UniqueFilteredApplications.Display_Name ) { $NewControlApplications = $ControlApplications | Where-Object { $PSItem.Display_Name -ne $ControlApplications[10].Display_Name }}
 
-try { $RegistryKeyCompare = Compare-Object -ReferenceObject $controlApplications -DifferenceObject $uniqueFilteredApplications -Property Display_Name  } catch { Write-Error "Failed to find differences for registry keys" }
-$RegistryKeyCompare
+# ====== Find Missing Registry Keys / Packages ====== #
+
+try { $MissingApplicationVersions = Compare-Object -ReferenceObject $NewControlApplications -DifferenceObject $UniqueFilteredApplications -Property Display_Name  } catch { Write-Error "Failed to find differences for registry keys." }
 
 # ====== Start Process Sequence ====== #
 
-$applicationChecklist = @( 
+$ApplicationCheckList = @( 
     [PSCustomObject]@{ Application_Name = "Acrobat"                  ; Window_Title = 'Adobe Acrobat Reader DC'              ; Special = $false ; Application_Path = 'C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe' },
     [PSCustomObject]@{ Application_Name = "WindowsCamera"            ; Window_Title = 'Camera'                               ; Special = $true  ; Application_Path = 'Microsoft.Windows.Camera:' },
     [PSCustomObject]@{ Application_Name = "Chrome"                   ; Window_Title = 'AppStore Main Page - J&J App Store'   ; Special = $true  ; Application_Path = 'http://appstore.jnj.com' },
@@ -135,14 +160,14 @@ $applicationChecklist = @(
     [PSCustomObject]@{ Application_Name = "ZSAService"               ; Window_Title = 'Zscaler Client Connector'             ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Zscaler\Zscaler.lnk' }
 )
 
-$runningApplications = @()
+$RunningApplications = @()
 
-$applicationChecklist | ForEach-Object {
+$ApplicationCheckList | ForEach-Object {
 
     Start-Process $PSItem.Application_Path -ErrorAction SilentlyContinue
 
     if (( -not $? ) -or (( -not ( Test-Path -Path $PSItem.Application_Path )) -and ( $PSItem.Special -eq $false ))) { Write-Output "Failed to start process: $($PSItem.Application_Name)" }
-    else { $runningApplications += $PSItem }
+    else { $RunningApplications += $PSItem }
 
     Start-Sleep -seconds 3
 }
@@ -151,52 +176,52 @@ $applicationChecklist | ForEach-Object {
 
 Start-Sleep -seconds 60
 
-try { $allActiveWindowTitles = ( Get-Process | Where-Object { $_.MainWindowHandle -ne 0 }).MainWindowTitle } catch { Write-Error $_ }
+try { $AllActiveWindowTitles = ( Get-Process | Where-Object { $_.MainWindowHandle -ne 0 }).MainWindowTitle } catch { Write-Error $_ }
 
-$validatedApplications = @()
+$ValidatedApplications = @()
 
-$runningApplications.ForEach{
+$RunningApplications.ForEach{
 
-    $matched = $false
-    $currentAppName = $PSItem.Application_Name
-    $currentAppProcess = Get-Process -Name $currentAppName
-    $specialStatus = $PSItem.Special
+    $Matched = $false
+    $CurrentAppName = $PSItem.Application_Name
+    $CurrentAppProcess = Get-Process -Name $CurrentAppName
+    $SpecialStatus = $PSItem.Special
     
-    $matchingTitle = $allActiveWindowTitles | Where-Object { $_ -like "*$($PSItem.Window_Title)*" }
+    $matchingTitle = $AllActiveWindowTitles | Where-Object { $_ -like "*$($PSItem.Window_Title)*" }
 
-    if (( $matchingTitle ) -and ( $currentAppProcess ) -and ( $currentAppProcess.Responding )) { $matched = $true }
-    elseif (( $specialStatus -eq $true ) -and ( $currentAppProcess )) { $matched = $true }
-    else { Write-Output "$currentAppName failed application validation." }  
+    if (( $matchingTitle ) -and ( $CurrentAppProcess ) -and ( $CurrentAppProcess.Responding )) { $Matched = $true }
+    elseif (( $SpecialStatus -eq $true ) -and ( $CurrentAppProcess )) { $Matched = $true }
+    else { Write-Output "$CurrentAppName failed application validation." }  
 
-    if ( $matched ){ $validatedApplications += $PSItem }
+    if ( $Matched ){ $ValidatedApplications += $PSItem }
 }
 
-# ====== Assemble Missing / Faild Validation Applications ====== #
+# ====== Assemble Missing / Failed Validation Applications ====== #
 
 function ApplicationsMissing {
     param (
-        [array]$controlArray,
-        [array]$differenceArray
+        [array]$ControlArray,
+        [array]$DifferenceArray
     )
 
-    $missingArray = @()
+    $MissingArray = @()
 
-    try { $findDifferences = Compare-Object -ReferenceObject $controlArray -DifferenceObject $differenceArray -Property Application_Name  } catch { Write-Error "Failed to find differences in ApplicationMissing" }
-    try { $findDifferences | Where-Object { $_.SideIndicator -eq "<=" } | ForEach-Object { $missingArray += $PSItem }} catch { Write-Error "Failed to select objects of difference in ApplicationMissing" }
+    try { $FindDifferences = Compare-Object -ReferenceObject $ControlArray -DifferenceObject $DifferenceArray -Property Application_Name  } catch { Write-Error "Failed to find differences in ApplicationMissing." }
+    try { $FindDifferences | Where-Object { $_.SideIndicator -eq "<=" } | ForEach-Object { $MissingArray += $PSItem }} catch { Write-Error "Failed to select objects of difference in ApplicationMissing." }
 
-    return $missingArray
+    return $MissingArray
 }
 
-try { $missingRunningApplications = ApplicationsMissing -controlArray ( $applicationChecklist | Select-Object -Property Application_Name -Unique ) -differenceArray $runningApplications } catch { Write-Error "Failed to determine missing running applications." }
-try { $missingValidatedApplications = ApplicationsMissing -controlArray ( $applicationChecklist | Select-Object -Property Application_Name -Unique ) -differenceArray $validatedApplications } catch { Write-Error "Failed to determine missing validated applications." }
+try { $MissingRunningApplications = ApplicationsMissing -ControlArray ( $ApplicationCheckList | Select-Object -Property Application_Name -Unique ) -DifferenceArray $RunningApplications } catch { Write-Error "Failed to determine missing running applications." }
+try { $MissingValidatedApplications = ApplicationsMissing -ControlArray ( $ApplicationCheckList | Select-Object -Property Application_Name -Unique ) -DifferenceArray $ValidatedApplications } catch { Write-Error "Failed to determine missing validated applications." }
 
 # ====== Close Running Applications ====== #
 
-$runningApplications.ForEach{ Stop-Process -name $PSItem.Application_Name -ErrorAction SilentlyContinue -Force }
+$RunningApplications.ForEach{ Stop-Process -name $PSItem.Application_Name -ErrorAction SilentlyContinue -Force }
 
 # ====== Testing Wifi Connection ====== #
 
-if ( $adminPriviledges ) {
+if ( $AdminPrivilege ) {
 
     $Ethernet = Get-NetAdapter | Where-Object {( $PSItem.Name -like 'Ethernet*' ) -and ( $PSItem.ifOperStatus -eq 'Up' )}
     $WiFi = Get-NetAdapter | Where-Object { $PSItem.Name -eq 'Wi-Fi' }
@@ -205,13 +230,13 @@ if ( $adminPriviledges ) {
     
     Start-Sleep -seconds 30
 
-    $counter = 0
-    while ($counter -ne 5){
+    $Counter = 0
+    while ($Counter -ne 5){
 
         $WiFi = Get-NetAdapter | Where-Object { $PSItem.Name -eq 'Wi-Fi' }
 
-        if ( $WiFi.InterfaceOperationalStatus -eq "Up" ) { break }
-        else { Start-Sleep -seconds 10 ; $counter++ }}
+        if ( $WiFi.ifOperStatus -eq "Up" ) { break }
+        else { Start-Sleep -seconds 10 ; $Counter++ }}
 
     Enable-NetAdapter -name $Ethernet.Name
 
@@ -220,54 +245,55 @@ if ( $adminPriviledges ) {
 }
 # ====== Retrieve Bitlocker Protection ====== #
 
-if ( $adminPriviledges ) { $bitlockerStatus = Get-BitLockerVolume -MountPoint C | Select-Object -Property MountPoint, EncryptionMethod, VolumeStatus, ProtectionStatus, EncryptionPercentage }
+if ( $AdminPrivilege ) { $bitlockerStatus = Get-BitLockerVolume -MountPoint C | Select-Object -Property MountPoint, EncryptionMethod, VolumeStatus, ProtectionStatus, EncryptionPercentage }
 
 # ====== Directory For Data Creation / Validation ====== #
 
-if ( -not ( Test-Path -Path "$currentDirectory/Data" )) { New-Item -Path "$currentDirectory/Data" -ItemType Directory }
-if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output" )) { New-Item -Path "$currentDirectory/Data/XML Output" -ItemType Directory }
-if ( -not ( Test-Path -Path "$currentDirectory/Data/HTML Output" )) { New-Item -Path "$currentDirectory/Data/HTML Output" -ItemType Directory }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data" )) { New-Item -Path "$CurrentDirectory/Data" -ItemType Directory }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output" )) { New-Item -Path "$CurrentDirectory/Data/XML Output" -ItemType Directory }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data/HTML Output" )) { New-Item -Path "$CurrentDirectory/Data/HTML Output" -ItemType Directory }
 
-if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output/$todaysDay" )) { New-Item -Path "$currentDirectory/Data/XML Output/$todaysDay" -ItemType Directory }
-if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName" )) { New-Item -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName" -ItemType Directory }
-if ( -not ( Test-Path -Path "$currentDirectory/Data/HTML Output/$todaysDay" )) { New-Item -Path "$currentDirectory/Data/HTML Output/$todaysDay" -ItemType Directory }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay" )) { New-Item -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay" -ItemType Directory }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName" )) { New-Item -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName" -ItemType Directory }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data/HTML Output/$DateMonthDay" )) { New-Item -Path "$CurrentDirectory/Data/HTML Output/$DateMonthDay" -ItemType Directory }
 
 # ====== XML Output ====== #
 
-$XMLFileName = "${Username}-${machineName}-${dateTime}.xml"
+$XMLFileName = "${Username}-${HostMachineName}-${DateTime}.xml"
 
-if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/Version-$XMLFileName" )) { $uniqueFilteredApplications | Export-Clixml -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/Version-$XMLFileName" }
-if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/Running-$XMLFileName" )) { $runningApplications | Export-Clixml -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/Running-$XMLFileName" }
-if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/Validated-$XMLFileName" )) { $validatedApplications | Export-Clixml -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/Validated-$XMLFileName" }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Version-$XMLFileName" )) { $UniqueFilteredApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Version-$XMLFileName" }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Running-$XMLFileName" )) { $RunningApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Running-$XMLFileName" }
+if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Validated-$XMLFileName" )) { $ValidatedApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Validated-$XMLFileName" }
 
-if ( $adminPriviledges ) {
+if ( $AdminPrivilege ) {
 
-    if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/WiFi-$XMLFileName" )) { $WiFi | Export-Clixml -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/WiFi-$XMLFileName" }
-    if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/Ethernet-$XMLFileName" )) { $Ethernet | Export-Clixml -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/Ethernet-$XMLFileName" }
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/WiFi-$XMLFileName" )) { $WiFi | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/WiFi-$XMLFileName" }
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Ethernet-$XMLFileName" )) { $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Ethernet-$XMLFileName" }
 
-    if ( -not ( Test-Path -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/VolumeC-$XMLFileName" )) { $Ethernet | Export-Clixml -Path "$currentDirectory/Data/XML Output/$todaysDay/$machineName/VolumeC-$XMLFileName" }    
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/VolumeC-$XMLFileName" )) { $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/VolumeC-$XMLFileName" }    
 }
 
 # ====== HTML Output ====== #
 
-$htmlUniqueFilteredApplications = $uniqueFilteredApplications | ConvertTo-Html -Fragment
-$htmlRunningApplications = $runningApplications | ConvertTo-Html -Fragment
-$htmlValidatedApplications = $validatedApplications | ConvertTo-Html -Fragment
-$htmlMissingRunningApplications = $missingRunningApplications | ConvertTo-Html -Fragment
-$htmlMissingValidatedApplications = $missingValidatedApplications | ConvertTo-Html -Fragment
+$HTMLUniqueFilteredApplications = $UniqueFilteredApplications | Select-Object -Property Display_Name, Version_Check, Display_Version, Target_Version, Type, Install_Source | ConvertTo-Html -Fragment
+$HTMLRunningApplications = $RunningApplications | Select-Object -Property Application_Name, Window_Title, Application_Path | ConvertTo-Html -Fragment
+$HTMLValidatedApplications = $ValidatedApplications | Select-Object -Property Application_Name, Window_Title, Application_Path | ConvertTo-Html -Fragment
+$HTMLMissingApplicationVersions = $MissingApplicationVersions | ConvertTo-Html -Fragment
+$HTMLMissingRunningApplications = $MissingRunningApplications | ConvertTo-Html -Fragment
+$HTMLMissingValidatedApplications = $MissingValidatedApplications | ConvertTo-Html -Fragment
 
 
-if ( $adminPriviledges ) {
+if ( $AdminPrivilege ) {
 
-    $htmlWiFi = $WiFi | ConvertTo-Html -Fragment
-    $htmlEthernet = $Ethernet | ConvertTo-Html -Fragment
+    $HTMLWiFi = $WiFi | ConvertTo-Html -Fragment
+    $HTMLEthernet = $Ethernet | ConvertTo-Html -Fragment
 
-    $htmlBitLockerStatus = $bitlockerStatus | ConvertTo-Html -Fragment
+    $HTMLBitLockerStatus = $bitlockerStatus | ConvertTo-Html -Fragment
 }
 
-if ( -not $adminPriviledges ) {
+if ( -not $AdminPrivilege ) {
 
-$htmlReport = @"
+$HTMLReport = @"
 <!DOCTYPE html>
 <html>
 <head>
@@ -276,16 +302,18 @@ $htmlReport = @"
 </head>
 <body>
     <h2>Version Comparison</h2>
-    $htmlUniqueFilteredApplications
+    $HTMLUniqueFilteredApplications
     <h2>Applications Running</h2>
-    $htmlrunningApplications
+    $HTMLRunningApplications
     <h2>Validated Applications</h2>
-    $htmlValidatedApplications
+    $HTMLValidatedApplications
     <section class="Second-Half">
+        <h2>Missing Application Versions</h2>
+        $HTMLMissingApplicationVersions
         <h2>Missing Running Applications</h2>
-        $htmlMissingRunningApplications
+        $HTMLMissingRunningApplications
         <h2>Missing Validated Applications</h2>
-        $htmlMissingValidatedApplications
+        $HTMLMissingValidatedApplications
     </section>
 </body>
 </html>
@@ -294,7 +322,7 @@ $htmlReport = @"
 
 else {
 
-$htmlReport = @"
+$HTMLReport = @"
 <!DOCTYPE html>
 <html>
 <head>
@@ -303,40 +331,42 @@ $htmlReport = @"
 </head>
 <body>
     <h2>Version Comparison</h2>
-    $htmlUniqueFilteredApplications
+    $HTMLUniqueFilteredApplications
     <h2>Applications Running</h2>
-    $htmlrunningApplications
+    $HTMLRunningApplications
     <h2>Validated Applications</h2>
-    $htmlValidatedApplications
+    $HTMLValidatedApplications
     <section class="Second-Half">
+        <h2>Missing Application Versions</h2>
+        $HTMLMissingApplicationVersions
         <h2>Missing Running Applications</h2>
-        $htmlMissingRunningApplications
+        $HTMLMissingRunningApplications
         <h2>Missing Validated Applications</h2>
-        $htmlMissingValidatedApplications
+        $HTMLMissingValidatedApplications
         <h2>WiFi Configuration</h2>
-        $htmlWiFi
+        $HTMLWiFi
         <h2>Ethernet Configuration</h2>
-        $htmlEthernet
+        $HTMLEthernet
         <h2>MountPoint C:</h2>
-        $htmlBitLockerStatus
+        $HTMLBitLockerStatus
     </section>
 </body>
 </html>
 "@
 }
 
-$HTMLFileName = "${Username}-${machineName}-${dateTime}.html"
-$HTMLOutputPath = "$currentDirectory/Data/HTML Output/$todaysDay/Report-$HTMLFileName"
-$htmlReport | Out-File -FilePath $HTMLOutputPath
+$HTMLFileName = "${Username}-${HostMachineName}-${DateTime}.html"
+$HTMLOutputPath = "$CurrentDirectory/Data/HTML Output/$DateMonthDay/Report-$HTMLFileName"
+$HTMLReport | Out-File -FilePath $HTMLOutputPath
 
 Start-Process $HTMLOutputPath
 
 # ====== End Timer ====== #
 
-$endTimer = Get-Date -f 'HHmmss'
-$totalTime = $endTimer - $startTimer
+$EndTimer = Get-Date -f 'HHmmss'
+$TotalTime = $EndTimer - $StartTimer
 
-Write-Output "Total time is: $totalTime"
+Write-Output "Total time is: $TotalTime"
 
 # ====== Closing ====== #
 
