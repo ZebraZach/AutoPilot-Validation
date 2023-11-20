@@ -1,15 +1,5 @@
 # ====== Initialization ====== #
 
-$AdminPrivilege = $false
-
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "Running with no Administrator rights."
-    $AdminPrivilege = $false
-} else {
-    Write-Host "Running with Administrator rights."
-    $AdminPrivilege = $true
-}
-
 $CurrentDirectory = Split-Path $MyInvocation.MyCommand.Path
 $HostUsername = $env:USERNAME
 $HostMachineName = $env:COMPUTERNAME
@@ -24,9 +14,61 @@ if ( -not ( Test-Path -Path "$CurrentDirectory/Transcript/$DateMonthDay" )) { Ne
 
 Start-Transcript -Path "$CurrentDirectory/Transcript/$DateMonthDay/${TranscriptFileName}"
 
+# ====== WPF ====== #
+
+Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName System.Windows.Forms
+
+$xamlFile = "$CurrentDirectory\AutoPilot Validation Beta.xaml"
+$inputXAML=Get-Content -Path $xamlFile -Raw
+$inputXAML=$inputXAML -replace 'mc:Ignorable="d"','' -replace "x:N","N" -replace '^<Win.*','<Window'
+[XML]$XAML=$inputXAML
+
+$reader = New-Object System.Xml.XmlNodeReader $XAML
+
+try {
+    $psForm2 = [Windows.Markup.XamlReader]::Load($reader)
+}catch{
+    Write-Error $_.Exception
+    throw
+}
+
+$xaml.SelectNodes("//*[@Name]") | ForEach-Object {
+    try{
+        Set-Variable -Name "var_$($_.Name)" -Value $psForm2.FindName($_.Name) -ErrorAction Stop
+    }catch{
+        Write-Error $_.Exception
+        throw
+    }
+}
+
+Get-Variable var_*
+
 # ====== Start Timer ====== #
 
 $StartTimer = Get-Date -f 'HHmmss'
+
+# ====== Check for Admin Priviledges ====== #
+
+$AdminPrivilege = $false
+
+if ( -not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator" )) {
+    [void]$var_lst_Logs.Items.Add( "Running with no Administrator rights." )
+    $AdminPrivilege = $false
+} else {
+    [void]$var_lst_Logs.Items.Add( "Running with Administrator rights." )
+    $AdminPrivilege = $true
+}
+
+# ====== Grab Config ====== #
+
+if ( Test-Path -path "$CurrentDirectory\Config.json" ){
+    $ConfigurationSettings = Get-Content -Path "$CurrentDirectory\Config.json" | ConvertFrom-Json
+    [void]$var_lst_Logs.Items.Add( "Retrieved Configuration File" )
+}else {
+    Write-Error "Ensure config file is in current directory"
+    throw
+}
 
 # ====== Registry Key Retrieval Function ====== #
 
@@ -90,138 +132,173 @@ $ControlApplications =@(
 
 $FilteredApplications=@()
 
-# ====== Invoke Retrieve_Registry_Versions ====== # 
-
-try { Retrieve_Registry_Versions -Path $UninstallKey64Bit -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { Write-Error "Failed to retrieve 64 bit registry keys." }
-try { Retrieve_Registry_Versions -Path $UninstallKey32Bit -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { Write-Error "Failed to retrieve 32 bit registry keys." }
-try { Retrieve_Registry_Versions -Path $UninstallKeyUser  -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { Write-Error "Failed to retrieve User Installed registry keys." }
-
-# ====== Check Company Portal Package ====== #
-
-$PackageCompanyPortal = Get-AppxPackage "Microsoft.CompanyPortal"
-
-if ( $PackageCompanyPortal ) {
-
-    $ModifiedItem = [PSCustomObject]@{
-        Display_Name = $PackageCompanyPortal.Name
-        Display_Version = $PackageCompanyPortal.Version
-        Target_Version = $ControlApplications[4].Target_Version
-        Type = $ControlApplications[4].Type
-        Install_Source = $PackageCompanyPortal.InstallLocation
-    }
-
-    $FilteredApplications += $ModifiedItem
-}
-
-# ====== Retrieve Display_Version For  J&J Icon and Link ====== #
-
-ForEach ( $element in $FilteredApplications ) {
-    if ( $element.Display_Name -like "*v3.0*" ) { $element.Display_Version = '3.0' }
-}
-
-# ====== Version Comparison ====== #
-
-$UniqueFilteredApplications = $FilteredApplications | Sort-Object -Property Display_Name -Unique
-
-$UniqueFilteredApplications.ForEach{
-    if ( $_.Target_Version -le $_.Display_Version ){ $PSItem | Add-Member -MemberType NoteProperty -Name "Version_Check" -Value $true }
-    else { $PSItem | Add-Member -MemberType NoteProperty -Name "Version_Check" -Value $false }
-}
-
-# ====== Cleaning Up Duplicates in $ControlApplications Array ====== #
-
-if ( $ControlApplications[9].Display_Name -in $UniqueFilteredApplications.Display_Name ) { $NewControlApplications = $ControlApplications | Where-Object { $PSItem.Display_Name -ne $ControlApplications[9].Display_Name }}
-elseif ( $ControlApplications[10].Display_Name -in $UniqueFilteredApplications.Display_Name ) { $NewControlApplications = $ControlApplications | Where-Object { $PSItem.Display_Name -ne $ControlApplications[10].Display_Name }}
-
-# ====== Find Missing Registry Keys / Packages ====== #
-
-try { $MissingApplicationVersions = Compare-Object -ReferenceObject $NewControlApplications -DifferenceObject $UniqueFilteredApplications -Property Display_Name  } catch { Write-Error "Failed to find differences for registry keys." }
-
-# ====== Start Process Sequence ====== #
-
-$ApplicationCheckList = @( 
-    [PSCustomObject]@{ Application_Name = "Acrobat"                  ; Window_Title = 'Adobe Acrobat Reader DC'              ; Special = $false ; Application_Path = 'C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe' },
-    [PSCustomObject]@{ Application_Name = "WindowsCamera"            ; Window_Title = 'Camera'                               ; Special = $true  ; Application_Path = 'Microsoft.Windows.Camera:' },
-    [PSCustomObject]@{ Application_Name = "Chrome"                   ; Window_Title = 'AppStore Main Page - J&J App Store'   ; Special = $true  ; Application_Path = 'http://appstore.jnj.com' },
-    [PSCustomObject]@{ Application_Name = "CompanyPortal"            ; Window_Title = 'Company Portal'                       ; Special = $true  ; Application_Path = 'shell:AppsFolder\Microsoft.CompanyPortal_8wekyb3d8bbwe!App' },
-    [PSCustomObject]@{ Application_Name = "EXCEL"                    ; Window_Title = 'Excel'                                ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE' },
-    [PSCustomObject]@{ Application_Name = "MSACCESS"                 ; Window_Title = 'Access'                               ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\MSACCESS.EXE' },
-    [PSCustomObject]@{ Application_Name = "ONENOTE"                  ; Window_Title = 'OneNote'                              ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\ONENOTE.EXE' },
-    [PSCustomObject]@{ Application_Name = "OneDrive"                 ; Window_Title = 'OneDrive - JNJ'                       ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft OneDrive\OneDrive.exe' },
-    [PSCustomObject]@{ Application_Name = "OneDrive"                 ; Window_Title = 'Microsoft OneDrive'                   ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk' },
-    [PSCustomObject]@{ Application_Name = "Outlook"                  ; Window_Title = 'Outlook'                              ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE' },
-    [PSCustomObject]@{ Application_Name = "Personal Print Manager"   ; Window_Title = 'Personal Print Manager'               ; Special = $false ; Application_Path = 'C:\Program Files\LRS\Personal Print Manager\Personal Print Manager.exe' },
-    [PSCustomObject]@{ Application_Name = "POWERPNT"                 ; Window_Title = 'PowerPoint'                           ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\POWERPNT.EXE' },
-    [PSCustomObject]@{ Application_Name = "SCClient"                 ; Window_Title = 'Software Center'                      ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Microsoft Configuration Manager\Configuration Manager\Software Center.lnk'},
-    [PSCustomObject]@{ Application_Name = "SCClient"                 ; Window_Title = 'Software Center'                      ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Microsoft Endpoint Manager\Configuration Manager\Software Center.lnk'},
-    [PSCustomObject]@{ Application_Name = "VoiceRecorder"            ; Window_Title = 'Sound Recorder'                       ; Special = $true  ; Application_Path = 'shell:AppsFolder\Microsoft.WindowsSoundRecorder_8wekyb3d8bbwe!App' },
-    [PSCustomObject]@{ Application_Name = "WINWORD"                  ; Window_Title = 'Word'                                 ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE' },
-    [PSCustomObject]@{ Application_Name = "Zoom"                     ; Window_Title = 'Zoom'                                 ; Special = $false ; Application_Path = 'C:\Program Files\Zoom\bin\Zoom.exe' },
-    [PSCustomObject]@{ Application_Name = "ZSAService"               ; Window_Title = 'Zscaler Client Connector'             ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Zscaler\Zscaler.lnk' }
-)
-
-$RunningApplications = @()
-
-$ApplicationCheckList | ForEach-Object {
-
-    Start-Process $PSItem.Application_Path -ErrorAction SilentlyContinue
-
-    if (( -not $? ) -or (( -not ( Test-Path -Path $PSItem.Application_Path )) -and ( $PSItem.Special -eq $false ))) { Write-Output "Failed to start process: $($PSItem.Application_Name)" }
-    else { $RunningApplications += $PSItem }
-
-    Start-Sleep -seconds 3
-}
-
-# ====== Get-Process & Window Title Sequence ====== #
-
-Start-Sleep -seconds 60
-
-try { $AllActiveWindowTitles = ( Get-Process | Where-Object { $_.MainWindowHandle -ne 0 }).MainWindowTitle } catch { Write-Error $_ }
-
-$ValidatedApplications = @()
-
-$RunningApplications.ForEach{
-
-    $Matched = $false
-    $CurrentAppName = $PSItem.Application_Name
-    $CurrentAppProcess = Get-Process -Name $CurrentAppName
-    $SpecialStatus = $PSItem.Special
+if ( $ConfigurationSettings.CheckVersions) {
     
-    $matchingTitle = $AllActiveWindowTitles | Where-Object { $_ -like "*$($PSItem.Window_Title)*" }
+    # ====== Invoke Retrieve_Registry_Versions ====== # 
+    
+    [void]$var_lst_Logs.Items.Add( "Checking Registry Paths For Applications" )
+    
+    try { Retrieve_Registry_Versions -Path $UninstallKey64Bit -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { [void]$var_lst_Logs.Items.Add( "Failed to retrieve 64 bit registry keys." )}
+    try { Retrieve_Registry_Versions -Path $UninstallKey32Bit -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { [void]$var_lst_Logs.Items.Add( "Failed to retrieve 32 bit registry keys." )}
+    try { Retrieve_Registry_Versions -Path $UninstallKeyUser  -ControlArray $ControlApplications -FilteredArray ( [ref]$FilteredApplications )} catch { [void]$var_lst_Logs.Items.Add( "Failed to retrieve User Installed registry keys." )}
+    
+    [void]$var_lst_Logs.Items.Add( "Retrieved Registry Values For Application Versions" )
 
-    if (( $matchingTitle ) -and ( $CurrentAppProcess ) -and ( $CurrentAppProcess.Responding )) { $Matched = $true }
-    elseif (( $SpecialStatus -eq $true ) -and ( $CurrentAppProcess )) { $Matched = $true }
-    else { Write-Output "$CurrentAppName failed application validation." }  
+    # ====== Check Company Portal Package ====== #
+    
+    [void]$var_lst_Logs.Items.Add( "Checking For CompanyPortal Package" )
+    
+    $PackageCompanyPortal = Get-AppxPackage "Microsoft.CompanyPortal"
+    
+    if ( $PackageCompanyPortal ) {
+    
+        $ModifiedItem = [PSCustomObject]@{
+            Display_Name = $PackageCompanyPortal.Name
+            Display_Version = $PackageCompanyPortal.Version
+            Target_Version = $ControlApplications[4].Target_Version
+            Type = $ControlApplications[4].Type
+            Install_Source = $PackageCompanyPortal.InstallLocation
+        }
 
-    if ( $Matched ){ $ValidatedApplications += $PSItem }
+        [void]$var_lst_Logs.Items.Add( "Retrieved CompanyPortal Package" )
+
+        $FilteredApplications += $ModifiedItem
+
+    } else{ [void]$var_lst_Logs.Items.Add( "Failed To Retrieve CompanyPortal Package" )}
+    
+    # ====== Retrieve Display_Version For  J&J Icon and Link ====== #
+    
+    ForEach ( $element in $FilteredApplications ) {
+        if ( $element.Display_Name -like "*v3.0*" ) { $element.Display_Version = '3.0' }
+    }
+    
+    # ====== Version Comparison ====== #
+    
+    [void]$var_lst_Logs.Items.Add( "Comparing Local Machine Versions With Control List" )
+
+    $UniqueFilteredApplications = $FilteredApplications | Sort-Object -Property Display_Name -Unique
+    
+    $UniqueFilteredApplications.ForEach{
+        if ( $_.Target_Version -le $_.Display_Version ){ $PSItem | Add-Member -MemberType NoteProperty -Name "Version_Check" -Value $true }
+        else { $PSItem | Add-Member -MemberType NoteProperty -Name "Version_Check" -Value $false }
+    }
+    
+    # ====== Cleaning Up Duplicates in $ControlApplications Array ====== #
+    
+    if ( $ControlApplications[9].Display_Name -in $UniqueFilteredApplications.Display_Name ) { $NewControlApplications = $ControlApplications | Where-Object { $PSItem.Display_Name -ne $ControlApplications[9].Display_Name }}
+    elseif ( $ControlApplications[10].Display_Name -in $UniqueFilteredApplications.Display_Name ) { $NewControlApplications = $ControlApplications | Where-Object { $PSItem.Display_Name -ne $ControlApplications[10].Display_Name }}
+    
+    # ====== Find Missing Registry Keys / Packages ====== #
+    
+    [void]$var_lst_Logs.Items.Add( "Finding Missing Registry Keys / Packages" )
+
+    try { $MissingApplicationVersions = Compare-Object -ReferenceObject $NewControlApplications -DifferenceObject $UniqueFilteredApplications -Property Display_Name  } catch { [void]$var_lst_Logs.Items.Add( "Failed to find differences for registry keys." )}
+    $var_lbl_CheckVersions.Content = "Success"
+    $var_lbl_CheckVersions.Foreground = [System.Windows.Media.Brushes]::Green
 }
 
-# ====== Assemble Missing / Failed Validation Applications ====== #
-
-function ApplicationsMissing {
-    param (
-        [array]$ControlArray,
-        [array]$DifferenceArray
+if ( $ConfigurationSettings.ValidateApplications ) {
+    
+    # ====== Start Process Sequence ====== #
+    
+    $ApplicationCheckList = @( 
+        [PSCustomObject]@{ Application_Name = "Acrobat"                  ; Window_Title = 'Adobe Acrobat Reader DC'              ; Special = $false ; Application_Path = 'C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe' },
+        [PSCustomObject]@{ Application_Name = "WindowsCamera"            ; Window_Title = 'Camera'                               ; Special = $true  ; Application_Path = 'Microsoft.Windows.Camera:' },
+        [PSCustomObject]@{ Application_Name = "Chrome"                   ; Window_Title = 'AppStore Main Page - J&J App Store'   ; Special = $true  ; Application_Path = 'http://appstore.jnj.com' },
+        [PSCustomObject]@{ Application_Name = "CompanyPortal"            ; Window_Title = 'Company Portal'                       ; Special = $true  ; Application_Path = 'shell:AppsFolder\Microsoft.CompanyPortal_8wekyb3d8bbwe!App' },
+        [PSCustomObject]@{ Application_Name = "EXCEL"                    ; Window_Title = 'Excel'                                ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE' },
+        [PSCustomObject]@{ Application_Name = "MSACCESS"                 ; Window_Title = 'Access'                               ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\MSACCESS.EXE' },
+        [PSCustomObject]@{ Application_Name = "ONENOTE"                  ; Window_Title = 'OneNote'                              ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\ONENOTE.EXE' },
+        [PSCustomObject]@{ Application_Name = "OneDrive"                 ; Window_Title = 'OneDrive - JNJ'                       ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft OneDrive\OneDrive.exe' },
+        [PSCustomObject]@{ Application_Name = "OneDrive"                 ; Window_Title = 'Microsoft OneDrive'                   ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk' },
+        [PSCustomObject]@{ Application_Name = "Outlook"                  ; Window_Title = 'Outlook'                              ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE' },
+        [PSCustomObject]@{ Application_Name = "Personal Print Manager"   ; Window_Title = 'Personal Print Manager'               ; Special = $false ; Application_Path = 'C:\Program Files\LRS\Personal Print Manager\Personal Print Manager.exe' },
+        [PSCustomObject]@{ Application_Name = "POWERPNT"                 ; Window_Title = 'PowerPoint'                           ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\POWERPNT.EXE' },
+        [PSCustomObject]@{ Application_Name = "SCClient"                 ; Window_Title = 'Software Center'                      ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Microsoft Configuration Manager\Configuration Manager\Software Center.lnk'},
+        [PSCustomObject]@{ Application_Name = "SCClient"                 ; Window_Title = 'Software Center'                      ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Microsoft Endpoint Manager\Configuration Manager\Software Center.lnk'},
+        [PSCustomObject]@{ Application_Name = "VoiceRecorder"            ; Window_Title = 'Sound Recorder'                       ; Special = $true  ; Application_Path = 'shell:AppsFolder\Microsoft.WindowsSoundRecorder_8wekyb3d8bbwe!App' },
+        [PSCustomObject]@{ Application_Name = "WINWORD"                  ; Window_Title = 'Word'                                 ; Special = $false ; Application_Path = 'C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE' },
+        [PSCustomObject]@{ Application_Name = "Zoom"                     ; Window_Title = 'Zoom'                                 ; Special = $false ; Application_Path = 'C:\Program Files\Zoom\bin\Zoom.exe' },
+        [PSCustomObject]@{ Application_Name = "ZSAService"               ; Window_Title = 'Zscaler Client Connector'             ; Special = $false ; Application_Path = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Zscaler\Zscaler.lnk' }
     )
+    
+    $RunningApplications = @()
+    
+    [void]$var_lst_Logs.Items.Add( "Starting The Application Validation Process" )
 
-    $MissingArray = @()
+    $ApplicationCheckList | ForEach-Object {
+    
+        Start-Process $PSItem.Application_Path -ErrorAction SilentlyContinue
+    
+        if (( -not $? ) -or (( -not ( Test-Path -Path $PSItem.Application_Path )) -and ( $PSItem.Special -eq $false ))) { [void]$var_lst_Logs.Items.Add( "Failed to start process: $($PSItem.Application_Name)" )}
+        else { $RunningApplications += $PSItem }
+    
+        Start-Sleep -seconds 3
+    }
+    
+    # ====== Get-Process & Window Title Sequence ====== #
+    
+    Start-Sleep -seconds 60
+    
+    [void]$var_lst_Logs.Items.Add( "Grabbing All Active Window Titles" )
 
-    try { $FindDifferences = Compare-Object -ReferenceObject $ControlArray -DifferenceObject $DifferenceArray -Property Application_Name  } catch { Write-Error "Failed to find differences in ApplicationMissing." }
-    try { $FindDifferences | Where-Object { $_.SideIndicator -eq "<=" } | ForEach-Object { $MissingArray += $PSItem }} catch { Write-Error "Failed to select objects of difference in ApplicationMissing." }
+    try { $AllActiveWindowTitles = ( Get-Process | Where-Object { $_.MainWindowHandle -ne 0 }).MainWindowTitle } catch { [void]$var_lst_Logs.Items.Add( "Failed Active Window: $_" )}
+    
+    $ValidatedApplications = @()
+    
+    [void]$var_lst_Logs.Items.Add( "Matching Running Applications With Active Window Titles" )
 
-    return $MissingArray
+    $RunningApplications.ForEach{
+    
+        $Matched = $false
+        $CurrentAppName = $PSItem.Application_Name
+        $CurrentAppProcess = Get-Process -Name $CurrentAppName
+        $SpecialStatus = $PSItem.Special
+        
+        $matchingTitle = $AllActiveWindowTitles | Where-Object { $_ -like "*$($PSItem.Window_Title)*" }
+    
+        if (( $matchingTitle ) -and ( $CurrentAppProcess ) -and ( $CurrentAppProcess.Responding )) { $Matched = $true }
+        elseif (( $SpecialStatus -eq $true ) -and ( $CurrentAppProcess )) { $Matched = $true }
+        else { [void]$var_lst_Logs.Items.Add( "$CurrentAppName failed application validation." )}  
+    
+        if ( $Matched ){ $ValidatedApplications += $PSItem }
+    }
+    
+    # ====== Assemble Missing / Failed Validation Applications ====== #
+    
+    function ApplicationsMissing {
+        param (
+            [array]$ControlArray,
+            [array]$DifferenceArray
+        )
+    
+        $MissingArray = @()
+    
+        try { $FindDifferences = Compare-Object -ReferenceObject $ControlArray -DifferenceObject $DifferenceArray -Property Application_Name  } catch { [void]$var_lst_Logs.Items.Add( "Failed to find differences in ApplicationMissing." )}
+        try { $FindDifferences | Where-Object { $_.SideIndicator -eq "<=" } | ForEach-Object { $MissingArray += $PSItem }} catch { [void]$var_lst_Logs.Items.Add( "Failed to select objects of difference in ApplicationMissing." )}
+    
+        return $MissingArray
+    }
+    
+    [void]$var_lst_Logs.Items.Add( "Assembling Missing / Failed Applications" )
+    try { $MissingRunningApplications = ApplicationsMissing -ControlArray ( $ApplicationCheckList | Select-Object -Property Application_Name -Unique ) -DifferenceArray $RunningApplications } catch { [void]$var_lst_Logs.Items.Add( "Failed to determine missing running applications." )}
+    try { $MissingValidatedApplications = ApplicationsMissing -ControlArray ( $ApplicationCheckList | Select-Object -Property Application_Name -Unique ) -DifferenceArray $ValidatedApplications } catch { [void]$var_lst_Logs.Items.Add( "Failed to determine missing validated applications." )}
+    
+    # ====== Close Running Applications ====== #
+
+    [void]$var_lst_Logs.Items.Add( "Closing All Running Applications" )
+
+    $RunningApplications.ForEach{ Stop-Process -name $PSItem.Application_Name -ErrorAction SilentlyContinue -Force }
+
+    $var_lbl_ValidateApps.Content = "Success"
+    $var_lbl_ValidateApps.Foreground = [System.Windows.Media.Brushes]::Green
 }
 
-try { $MissingRunningApplications = ApplicationsMissing -ControlArray ( $ApplicationCheckList | Select-Object -Property Application_Name -Unique ) -DifferenceArray $RunningApplications } catch { Write-Error "Failed to determine missing running applications." }
-try { $MissingValidatedApplications = ApplicationsMissing -ControlArray ( $ApplicationCheckList | Select-Object -Property Application_Name -Unique ) -DifferenceArray $ValidatedApplications } catch { Write-Error "Failed to determine missing validated applications." }
+if ( $AdminPrivilege -and ( $ConfigurationSettings.TestInternet )) {
 
-# ====== Close Running Applications ====== #
+    # ====== Testing Wifi Connection ====== #
 
-$RunningApplications.ForEach{ Stop-Process -name $PSItem.Application_Name -ErrorAction SilentlyContinue -Force }
-
-# ====== Testing Wifi Connection ====== #
-
-if ( $AdminPrivilege ) {
+    [void]$var_lst_Logs.Items.Add( "Testing Ethernet and WiFi Functionality" )
 
     $Ethernet = Get-NetAdapter | Where-Object {( $PSItem.Name -like 'Ethernet*' ) -and ( $PSItem.ifOperStatus -eq 'Up' )}
     $WiFi = Get-NetAdapter | Where-Object { $PSItem.Name -eq 'Wi-Fi' }
@@ -242,10 +319,22 @@ if ( $AdminPrivilege ) {
 
     $Ethernet = $Ethernet | Select-Object -Property Name, MacAddress, Status, LinkSpeed, MediaType, PhysicalMediaType, MediaConnectionState, DriverInformation, ifOperStatus, ifDesc
     $WiFi = $WiFi | Select-Object -Property Name, MacAddress, Status, LinkSpeed, MediaType, MediaConnectionState, DriverInformation, ifOperStatus, ifDesc
+
+    $var_lbl_TestInternet.Content = "Success"
+    $var_lbl_TestInternet.Foreground = [System.Windows.Media.Brushes]::Green
 }
+
 # ====== Retrieve Bitlocker Protection ====== #
 
-if ( $AdminPrivilege ) { $bitlockerStatus = Get-BitLockerVolume -MountPoint C | Select-Object -Property MountPoint, EncryptionMethod, VolumeStatus, ProtectionStatus, EncryptionPercentage }
+
+
+if ( $AdminPrivilege -and ( $ConfigurationSettings.BitLockerProtection )) {
+    [void]$var_lst_Logs.Items.Add( "Retrieving Bitlocker Protection Information" )
+    $bitlockerStatus = Get-BitLockerVolume -MountPoint C | Select-Object -Property MountPoint, EncryptionMethod, VolumeStatus, ProtectionStatus, EncryptionPercentage 
+
+    $var_lbl_BitLocker.Content = "Success"
+    $var_lbl_BitLocker.Foreground = [System.Windows.Media.Brushes]::Green
+}
 
 # ====== Directory For Data Creation / Validation ====== #
 
@@ -257,41 +346,85 @@ if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay" ))
 if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName" )) { New-Item -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName" -ItemType Directory }
 if ( -not ( Test-Path -Path "$CurrentDirectory/Data/HTML Output/$DateMonthDay" )) { New-Item -Path "$CurrentDirectory/Data/HTML Output/$DateMonthDay" -ItemType Directory }
 
-# ====== XML Output ====== #
+if ( $ConfigurationSettings.XMLOutput ) {
 
-$XMLFileName = "${Username}-${HostMachineName}-${DateTime}.xml"
+    # ====== XML Output ====== #
+    
+    [void]$var_lst_Logs.Items.Add( "Creating XML Files" )
 
-if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Version-$XMLFileName" )) { $UniqueFilteredApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Version-$XMLFileName" }
-if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Running-$XMLFileName" )) { $RunningApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Running-$XMLFileName" }
-if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Validated-$XMLFileName" )) { $ValidatedApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Validated-$XMLFileName" }
+    $XMLFileName = "${Username}-${HostMachineName}-${DateTime}.xml"
+    
+    ##Check Versions
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Version-$XMLFileName" ) -and ( $ConfigurationSettings.CheckVersions )) { 
+        $UniqueFilteredApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Version-$XMLFileName" 
+    }
+    
 
-if ( $AdminPrivilege ) {
+    ##Validate Applications - Running Applications
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Running-$XMLFileName" ) -and ( $ConfigurationSettings.ValidateApplications )) { 
+        $RunningApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Running-$XMLFileName" 
+    }
+    
+    ##Validate Applications - Validated Applications
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Validated-$XMLFileName" ) -and ( $ConfigurationSettings.ValidateApplications )) {
+         $ValidatedApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Validated-$XMLFileName" 
+    }
+    
+    if ( $AdminPrivilege ) {
 
-    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/WiFi-$XMLFileName" )) { $WiFi | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/WiFi-$XMLFileName" }
-    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Ethernet-$XMLFileName" )) { $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Ethernet-$XMLFileName" }
+        ##Test Internet - WiFi
+        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/WiFi-$XMLFileName" ) -and ( $ConfigurationSettings.TestInternet )) { 
+            $WiFi | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/WiFi-$XMLFileName" 
+        }
 
-    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/VolumeC-$XMLFileName" )) { $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/VolumeC-$XMLFileName" }    
+        ##Test Internet - Ethernet
+        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Ethernet-$XMLFileName" ) -and ($ConfigurationSettings.TestInternet )) { 
+            $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Ethernet-$XMLFileName" 
+        }
+        
+        ##Bitlocker Protection
+        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/VolumeC-$XMLFileName" ) -and ( $ConfigurationSettings.BitLockerProtection )) { 
+            $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/VolumeC-$XMLFileName" 
+        }    
+    }
+
+    $var_lbl_XMLOutput.Content = "Success"
+    $var_lbl_XMLOutput.Foreground = [System.Windows.Media.Brushes]::Green
 }
 
-# ====== HTML Output ====== #
+if ( $ConfigurationSettings.HTMLOutput ) {
 
-$HTMLUniqueFilteredApplications = $UniqueFilteredApplications | Select-Object -Property Display_Name, Version_Check, Display_Version, Target_Version, Type, Install_Source | ConvertTo-Html -Fragment
-$HTMLRunningApplications = $RunningApplications | Select-Object -Property Application_Name, Window_Title, Application_Path | ConvertTo-Html -Fragment
-$HTMLValidatedApplications = $ValidatedApplications | Select-Object -Property Application_Name, Window_Title, Application_Path | ConvertTo-Html -Fragment
-$HTMLMissingApplicationVersions = $MissingApplicationVersions | ConvertTo-Html -Fragment
-$HTMLMissingRunningApplications = $MissingRunningApplications | ConvertTo-Html -Fragment
-$HTMLMissingValidatedApplications = $MissingValidatedApplications | ConvertTo-Html -Fragment
+    # ====== HTML Output ====== #
 
+    [void]$var_lst_Logs.Items.Add( "Creating HTML File" )
 
-if ( $AdminPrivilege ) {
+    ##Check Versions
+    if ( $ConfigurationSettings.CheckVersions ) {
+        $HTMLUniqueFilteredApplications = $UniqueFilteredApplications | Select-Object -Property Display_Name, Version_Check, Display_Version, Target_Version, Type, Install_Source | ConvertTo-Html -Fragment
+    }
 
-    $HTMLWiFi = $WiFi | ConvertTo-Html -Fragment
-    $HTMLEthernet = $Ethernet | ConvertTo-Html -Fragment
+    ##Validate Applications
+    if ( $ConfigurationSettings.ValidateApplications ) {
+        $HTMLRunningApplications = $RunningApplications | Select-Object -Property Application_Name, Window_Title, Application_Path | ConvertTo-Html -Fragment
+        $HTMLValidatedApplications = $ValidatedApplications | Select-Object -Property Application_Name, Window_Title, Application_Path | ConvertTo-Html -Fragment
+        $HTMLMissingApplicationVersions = $MissingApplicationVersions | ConvertTo-Html -Fragment
+        $HTMLMissingRunningApplications = $MissingRunningApplications | ConvertTo-Html -Fragment
+        $HTMLMissingValidatedApplications = $MissingValidatedApplications | ConvertTo-Html -Fragment
+    }
 
-    $HTMLBitLockerStatus = $bitlockerStatus | ConvertTo-Html -Fragment
-}
+    if ( $AdminPrivilege ) {
 
-if ( -not $AdminPrivilege ) {
+        if ( $ConfigurationSettings.TestInternet ) {
+            $HTMLWiFi = $WiFi | ConvertTo-Html -Fragment
+            $HTMLEthernet = $Ethernet | ConvertTo-Html -Fragment
+        }
+
+        if ( $ConfigurationSettings.BitLockerProtection ) {
+            $HTMLBitLockerStatus = $bitlockerStatus | ConvertTo-Html -Fragment
+        }
+    }
+
+    if ( -not $AdminPrivilege ) {
 
 $HTMLReport = @"
 <!DOCTYPE html>
@@ -355,21 +488,40 @@ $HTMLReport = @"
 "@
 }
 
-$HTMLFileName = "${Username}-${HostMachineName}-${DateTime}.html"
-$HTMLOutputPath = "$CurrentDirectory/Data/HTML Output/$DateMonthDay/Report-$HTMLFileName"
-$HTMLReport | Out-File -FilePath $HTMLOutputPath
+    $HTMLFileName = "${Username}-${HostMachineName}-${DateTime}.html"
+    $HTMLOutputPath = "$CurrentDirectory/Data/HTML Output/$DateMonthDay/Report-$HTMLFileName"
+    $HTMLReport | Out-File -FilePath $HTMLOutputPath
 
-Start-Process $HTMLOutputPath
+    [void]$var_lst_Logs.Items.Add( "Opening HTML at $HTMLOutputPath" )
+
+    Start-Process $HTMLOutputPath
+
+    $var_lbl_HTMLOutput.Content = "Success"
+    $var_lbl_HTMLOutput.Foreground = [System.Windows.Media.Brushes]::Green
+}
 
 # ====== End Timer ====== #
 
 $EndTimer = Get-Date -f 'HHmmss'
 $TotalTime = $EndTimer - $StartTimer
 
-Write-Output "Total time is: $TotalTime"
+[void]$var_lst_Logs.Items.Add( "Total Time: $TotalTime" )
+
+# ====== Run Again Button Functionality ====== #
+
+$var_btn_RunAgain.Add_Click({
+    $psForm2.Close()
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-File `"$($CurrentDirectory)\AutoPilot Validation Beta.ps1`""
+})
+
+# ====== XML Reader Button Functionality ====== #
+
+# ====== Close Button Functionality ====== #
+
+$var_btn_Close.Add_Click({ $psForm2.Close() })
 
 # ====== Closing ====== #
 
- Stop-Transcript
+Stop-Transcript
 
- Read-Host 'Press Enter to Exit'
+$psForm2.ShowDialog()

@@ -1,0 +1,105 @@
+﻿<Window x:Class="AutoPilot_Execution.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:AutoPilot_Execution"
+        mc:Ignorable="d"
+        Title="AutoPilot Validation" Height="600" Width="650"
+        ResizeMode="NoResize"
+        Background="#F5F5F5">
+    <Grid>
+        <Rectangle HorizontalAlignment="Left" Height="265" Margin="391,95,0,0" Stroke="Black" VerticalAlignment="Top" Width="226" RadiusX="15" RadiusY="15" StrokeThickness="3"/>
+        <Label x:Name="lbl_ProgressBar" HorizontalContentAlignment="Center" Content="AutoPilot Validation" HorizontalAlignment="Center" Margin="0,13,0,0" VerticalAlignment="Top" Background="#FF38598B" FontSize="24" FontWeight="Bold" Width="558" Foreground="#FFECE8E8" Height="47">
+            <Label.Effect>
+                <DropShadowEffect/>
+            </Label.Effect>
+        </Label>
+        <ListBox x:Name="lst_Logs" Margin="25,95,280,44" Background="#FF5B5252" Foreground="White" BorderThickness="2,2,2,2"/>
+        <Label Content="Check Versions:" HorizontalAlignment="Left" Margin="416,162,0,0" VerticalAlignment="Top" BorderThickness="0,0,1,0" BorderBrush="Black" Width="100"/>
+        <Label Content="STATUS" HorizontalAlignment="Left" Margin="469,112,0,0" VerticalAlignment="Top" FontWeight="Bold" FontSize="16" BorderThickness="1,1,1,1" BorderBrush="Black" Foreground="#FFFAFAFA" Background="#FF2A363B">
+            <Label.Effect>
+                <DropShadowEffect/>
+            </Label.Effect>
+        </Label>
+        <Button x:Name="btn_RunAgain" Content="RUN AGAIN" HorizontalAlignment="Left" Margin="428,375,0,0" VerticalAlignment="Top" Height="45" Width="152" Background="#FF10316B" Foreground="#FFFAFAFA" BorderBrush="Black" FontWeight="Bold" BorderThickness="2,2,2,2"/>
+        <Button x:Name="btn_XMLReader" Content="XML READER" HorizontalAlignment="Left" Margin="428,435,0,0" VerticalAlignment="Top" Height="45" Width="152" Background="#FF347474" Foreground="#FFFAFAFA" BorderBrush="Black" FontWeight="Bold" BorderThickness="2,2,2,2"/>
+        <Button x:Name="btn_Close" Content="CLOSE" HorizontalAlignment="Left" Margin="428,495,0,0" VerticalAlignment="Top" Height="45" Width="152" Background="#FFC13131" Foreground="#FFFAFAFA" BorderBrush="Black" FontWeight="Bold" BorderThickness="2,2,2,2"/>
+        <Label Content="Validate Apps:" HorizontalAlignment="Left" Margin="416,188,0,0" VerticalAlignment="Top" BorderThickness="0,0,1,0" BorderBrush="Black" Width="100"/>
+        <Label Content="Test Internet:" HorizontalAlignment="Left" Margin="416,214,0,0" VerticalAlignment="Top" BorderThickness="0,0,1,0" BorderBrush="Black" Width="100" RenderTransformOrigin="0.5,0.772"/>
+        <Label Content="BitLocker:" HorizontalAlignment="Left" Margin="416,240,0,0" VerticalAlignment="Top" BorderThickness="0,0,1,0" BorderBrush="Black" Width="100" RenderTransformOrigin="0.5,0.772"/>
+        <Label Content="XML Output:" HorizontalAlignment="Left" Margin="416,266,0,0" VerticalAlignment="Top" BorderThickness="0,0,1,0" BorderBrush="Black" Width="100" RenderTransformOrigin="0.5,0.772"/>
+        <Label Content="HTML Output:" HorizontalAlignment="Left" Margin="416,292,0,0" VerticalAlignment="Top" BorderThickness="0,0,1,0" BorderBrush="Black" Width="100" RenderTransformOrigin="0.5,0.772"/>
+        <Label Content="Azure Output:" HorizontalAlignment="Left" Margin="416,318,0,0" VerticalAlignment="Top" BorderThickness="0,0,1,0" BorderBrush="Black" Width="100" RenderTransformOrigin="0.5,0.772"/>
+        <Label x:Name="lbl_CheckVersions" Content="Disabled" HorizontalAlignment="Left" Margin="530,162,0,0" VerticalAlignment="Top" Foreground="Red" RenderTransformOrigin="0.5,0.5" Width="55">
+            <Label.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform ScaleX="1"/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Label.RenderTransform>
+        </Label>
+        <Label x:Name="lbl_ValidateApps" Content="Disabled" HorizontalAlignment="Left" Margin="530,188,0,0" VerticalAlignment="Top" Foreground="Red" RenderTransformOrigin="0.5,0.5" Width="55">
+            <Label.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform ScaleX="1"/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Label.RenderTransform>
+        </Label>
+        <Label x:Name="lbl_TestInternet" Content="Disabled" HorizontalAlignment="Left" Margin="530,214,0,0" VerticalAlignment="Top" Foreground="Red" RenderTransformOrigin="0.5,0.5" Width="55">
+            <Label.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform ScaleX="1"/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Label.RenderTransform>
+        </Label>
+        <Label x:Name="lbl_BitLocker" Content="Disabled" HorizontalAlignment="Left" Margin="530,240,0,0" VerticalAlignment="Top" Foreground="Red" RenderTransformOrigin="0.5,0.5" Width="55">
+            <Label.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform ScaleX="1"/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Label.RenderTransform>
+        </Label>
+        <Label x:Name="lbl_XMLOutput" Content="Disabled" HorizontalAlignment="Left" Margin="530,266,0,0" VerticalAlignment="Top" Foreground="Red" RenderTransformOrigin="0.5,0.5" Width="55">
+            <Label.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform ScaleX="1"/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Label.RenderTransform>
+        </Label>
+        <Label x:Name="lbl_HTMLOutput" Content="Disabled" HorizontalAlignment="Left" Margin="530,292,0,0" VerticalAlignment="Top" Foreground="Red" RenderTransformOrigin="0.5,0.5" Width="55">
+            <Label.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform ScaleX="1"/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Label.RenderTransform>
+        </Label>
+        <Label x:Name="lbl_AzureOutput" Content="Disabled" HorizontalAlignment="Left" Margin="530,318,0,0" VerticalAlignment="Top" Foreground="Red" RenderTransformOrigin="0.5,0.5" Width="55">
+            <Label.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform ScaleX="1"/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Label.RenderTransform>
+        </Label>
+    </Grid>
+</Window>

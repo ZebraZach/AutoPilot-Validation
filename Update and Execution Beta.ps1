@@ -204,10 +204,10 @@ $var_btn_Execute.Add_Click({
 if($config.CheckVersions){$var_chk_CheckVersions.IsChecked = "True"}
 if($config.ValidateApplications){$var_chk_ValidateApplications.IsChecked = "True"}
 if($config.TestInternet){$var_chk_TestInternet.IsChecked = "True"}
+if($config.BitLockerProtection){$var_chk_BitLockerProtection.IsChecked = "True"}
 if($config.XMLOutput){$var_chk_XMLOutput.IsChecked = "True"}
 if($config.HTMLOutput){$var_chk_HTMLOutput.IsChecked = "True"}
 if($config.AzureOutput){$var_chk_AzureOutput.IsChecked = "True"}
-if($config.XMLOutput){$var_chk_XMLReader.IsChecked = "True"}
 
 # ====== Config Checkboxes Functionality ====== #
 
@@ -220,6 +220,9 @@ $var_chk_ValidateApplications.Add_UnChecked({$config.ValidateApplications = $fal
 $var_chk_TestInternet.Add_Checked({$config.TestInternet = $true})
 $var_chk_TestInternet.Add_UnChecked({$config.TestInternet = $false})
 
+$var_chk_BitLockerProtection.Add_Checked({$config.BitLockerProtection = $true})
+$var_chk_BitLockerProtection.Add_UnChecked({$config.BitLockerProtection = $false})
+
 $var_chk_XMLOutput.Add_Checked({$config.XMLOutput = $true})
 $var_chk_XMLOutput.Add_UnChecked({$config.XMLOutput = $false})
 
@@ -228,9 +231,6 @@ $var_chk_HTMLOutput.Add_UnChecked({$config.HTMLOutput = $false})
 
 $var_chk_AzureOutput.Add_Checked({$config.AzureOutput = $true})
 $var_chk_AzureOutput.Add_UnChecked({$config.AzureOutput = $false})
-
-$var_chk_XMLReader.Add_Checked({$config.XMLReader = $true})
-$var_chk_XMLReader.Add_UnChecked({$config.XMLReader = $false})
 
 # ====== Initialize Form ====== #
 
