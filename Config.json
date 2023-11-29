@@ -1,0 +1,9 @@
+{
+    "CheckVersions": true,
+    "ValidateApplications": true,
+    "TestInternet": true,
+    "BitLockerProtection": true,
+    "XMLOutput": true,
+    "HTMLOutput": true,
+    "AzureOutput": false
+}

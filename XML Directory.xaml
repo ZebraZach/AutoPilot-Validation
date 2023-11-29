@@ -1,0 +1,23 @@
+﻿<Window x:Class="XML_Directory.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:XML_Directory"
+        mc:Ignorable="d"
+        Title="XML Directory" Height="350" Width="450"
+        ResizeMode="NoResize"
+        Background="#F5F5F5">
+    <Grid>
+        <Border BorderBrush="Black" BorderThickness="3,3,3,3" CornerRadius="10" Padding="6,6,6,6" Background="#FF2A363B" Margin="35,19,35,0" VerticalAlignment="Top" Height="70">
+            <Border.Effect>
+                <DropShadowEffect/>
+            </Border.Effect>
+            <Label Content="XML Directory" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" FontWeight="Bold" Foreground="#FFFAFAFA" Background="#FF2A363B"/>
+        </Border>
+        <Button x:Name="btn_XMLDirectory" Content="CHOOSE DIRECTORY" HorizontalAlignment="Center" Margin="0,119,0,0" VerticalAlignment="Top" Height="60" Width="310" Background="#FF626FE6" Foreground="#FFFAFAFA" BorderBrush="Black" FontWeight="Bold" BorderThickness="2,2,2,2" FontSize="18"/>
+        <Label x:Name="lbl_XMLDirectory" Content="Ensure Directory Is A Machine Name" HorizontalAlignment="Center" Margin="0,259,0,0" VerticalAlignment="Top" Width="380" HorizontalContentAlignment="Center" FontSize="18" FontWeight="Bold"/>
+        <TextBox x:Name="txt_XMLDirectory" HorizontalAlignment="Center" Margin="0,209,0,0" VerticalAlignment="Top" Width="310" Height="33" VerticalContentAlignment="Center" BorderThickness="2,2,2,2" IsReadOnly="True" MaxLines="1" IsUndoEnabled="False"/>
+
+    </Grid>
+</Window>

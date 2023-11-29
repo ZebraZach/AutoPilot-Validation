@@ -42,8 +42,6 @@ $xaml.SelectNodes("//*[@Name]") | ForEach-Object {
     }
 }
 
-Get-Variable var_*
-
 # ====== Start Timer ====== #
 
 $StartTimer = Get-Date -f 'HHmmss'
@@ -352,39 +350,39 @@ if ( $ConfigurationSettings.XMLOutput ) {
     
     [void]$var_lst_Logs.Items.Add( "Creating XML Files" )
 
-    $XMLFileName = "${Username}-${HostMachineName}-${DateTime}.xml"
+    $XMLFileName = "${DateTime}-${Username}-${HostMachineName}"
     
     ##Check Versions
-    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Version-$XMLFileName" ) -and ( $ConfigurationSettings.CheckVersions )) { 
-        $UniqueFilteredApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Version-$XMLFileName" 
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--Version.xml" ) -and ( $ConfigurationSettings.CheckVersions )) { 
+        $UniqueFilteredApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--Version.xml" 
     }
     
 
     ##Validate Applications - Running Applications
-    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Running-$XMLFileName" ) -and ( $ConfigurationSettings.ValidateApplications )) { 
-        $RunningApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Running-$XMLFileName" 
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--Running.xml" ) -and ( $ConfigurationSettings.ValidateApplications )) { 
+        $RunningApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--Running.xml" 
     }
     
     ##Validate Applications - Validated Applications
-    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Validated-$XMLFileName" ) -and ( $ConfigurationSettings.ValidateApplications )) {
-         $ValidatedApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Validated-$XMLFileName" 
+    if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--Validated.xml" ) -and ( $ConfigurationSettings.ValidateApplications )) {
+         $ValidatedApplications | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--Validated.xml" 
     }
     
     if ( $AdminPrivilege ) {
 
         ##Test Internet - WiFi
-        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/WiFi-$XMLFileName" ) -and ( $ConfigurationSettings.TestInternet )) { 
-            $WiFi | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/WiFi-$XMLFileName" 
+        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--WiFi.xml" ) -and ( $ConfigurationSettings.TestInternet )) { 
+            $WiFi | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--WiFi.xml" 
         }
 
         ##Test Internet - Ethernet
-        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Ethernet-$XMLFileName" ) -and ($ConfigurationSettings.TestInternet )) { 
-            $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/Ethernet-$XMLFileName" 
+        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--Ethernet.xml" ) -and ($ConfigurationSettings.TestInternet )) { 
+            $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--Ethernet.xml" 
         }
         
         ##Bitlocker Protection
-        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/VolumeC-$XMLFileName" ) -and ( $ConfigurationSettings.BitLockerProtection )) { 
-            $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/VolumeC-$XMLFileName" 
+        if ( -not ( Test-Path -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--VolumeC.xml" ) -and ( $ConfigurationSettings.BitLockerProtection )) { 
+            $Ethernet | Export-Clixml -Path "$CurrentDirectory/Data/XML Output/$DateMonthDay/$HostMachineName/$XMLFileName--VolumeC.xml" 
         }    
     }
 
@@ -511,10 +509,16 @@ $TotalTime = $EndTimer - $StartTimer
 
 $var_btn_RunAgain.Add_Click({
     $psForm2.Close()
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-File `"$($CurrentDirectory)\AutoPilot Validation Beta.ps1`""
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -File `"$($CurrentDirectory)\AutoPilot Validation Beta.ps1`""
 })
 
 # ====== XML Reader Button Functionality ====== #
+
+function Start_Reader {
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -File `"$($CurrentDirectory)\XML Reader.ps1`"" -NoNewWindow
+}
+
+$var_btn_XMLReader.Add_Click({ Start_Reader })
 
 # ====== Close Button Functionality ====== #
 

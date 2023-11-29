@@ -52,8 +52,6 @@ $xaml.SelectNodes("//*[@Name]") | ForEach-Object {
     }
 }
 
-Get-Variable var_*
-
 # ====== Grab Config ====== #
 
 if(Test-Path -path "$currentLocation\Config.json"){
@@ -189,7 +187,7 @@ $var_btn_Execute.Add_Click({
     if(($versionFlag -eq $false) -and (Test-Path -Path "$($var_txt_LocalLocation.Text)\AutoPilot Validation Beta.ps1")){
         $jsonString = $config | ConvertTo-Json -Depth 5
         Set-Content -Path "$($var_txt_LocalLocation.Text)\Config.json" -Value $jsonString
-        Start-Process -FilePath "powershell.exe" -ArgumentList "-File `"$($var_txt_LocalLocation.Text)\AutoPilot Validation Beta.ps1`""
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -File `"$($var_txt_LocalLocation.Text)\AutoPilot Validation Beta.ps1`""
 
         $psForm.Close()
     }else{
